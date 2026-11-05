@@ -28,6 +28,8 @@
     </style>
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         input[type=number]::-webkit-inner-spin-button,
@@ -36,32 +38,80 @@
             margin: 0;
         }
         input[type=number] { -moz-appearance: textfield; }
-        @media print {
-            body { background-color: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .no-print { display: none !important; }
-            .print-exact { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            input, textarea {
-                border: none !important; background: transparent !important; box-shadow: none !important;
-                resize: none !important; outline: none !important; padding: 0 !important; margin: 0 !important; color: black !important;
-            }
-            input::placeholder, textarea::placeholder { color: transparent !important; }
-            .page-container { box-shadow: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
+                .action-bar { position: sticky; top: 0; z-index: 40; backdrop-filter: blur(8px); }
+        .scale-control { display: flex; align-items: center; gap: 0.5rem; flex: 1 1 100%; justify-content: flex-start; }
+        .scale-control label { font-size: 0.875rem; font-weight: 600; color: #374151; white-space: nowrap; }
+        .scale-control input[type=number] {
+            width: 4.5rem; min-height: 48px; text-align: center; border: 1px solid #d1d5db;
+            border-radius: 0.5rem; font-weight: 700; background: #fff;
         }
-        .action-bar { position: sticky; top: 0; z-index: 40; backdrop-filter: blur(8px); }
+        #previewOverlay {
+            display: none; position: fixed; inset: 0; z-index: 100; background: rgba(17,24,39,0.72);
+            padding: 1rem; overflow: auto; -webkit-overflow-scrolling: touch;
+        }
+        #previewOverlay.open { display: block; }
+        #previewSheet {
+            width: 210mm; min-height: 297mm; margin: 0 auto 1.5rem; background: #fff;
+            box-shadow: 0 25px 50px rgba(0,0,0,.35); transform-origin: top center;
+            overflow: hidden;
+        }
+        #previewToolbar {
+            position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 0.5rem;
+            align-items: center; justify-content: space-between; background: rgba(17,24,39,0.92);
+            color: #fff; padding: 0.75rem 1rem; border-radius: 0.75rem; margin-bottom: 1rem;
+        }
+        #previewToolbar button {
+            min-height: 44px; padding: 0.6rem 1rem; border: 0; border-radius: 0.5rem;
+            font-weight: 600; cursor: pointer;
+        }
+        @media print {
+            @page { size: A4 portrait; margin: 8mm; }
+            html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+            #previewOverlay, .action-bar, .no-print { display: none !important; }
+            .page-container {
+                box-shadow: none !important; margin: 0 !important; padding: 0 !important;
+                max-width: 100% !important; width: 100% !important; border-radius: 0 !important;
+                transform: scale(var(--print-scale, 0.95));
+                transform-origin: top left;
+            }
+            header { padding-bottom: 0.75rem !important; margin-bottom: 1rem !important; }
+            section { margin-bottom: 1rem !important; }
+            img { max-height: 72px !important; width: auto !important; }
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 font-sans p-4 md:p-8">
 
-    <div class="action-bar max-w-4xl mx-auto mb-6 flex flex-wrap gap-2 justify-end no-print bg-gray-100/95 py-3">
+    <div class="action-bar max-w-4xl mx-auto mb-6 flex flex-wrap gap-2 items-center justify-end no-print bg-gray-100/95 py-3">
+        <div class="scale-control">
+            <label for="printScale">Escala</label>
+            <input type="number" id="printScale" min="50" max="100" step="1" value="95" inputmode="numeric" aria-label="Escala de impresión en porcentaje">
+            <span class="text-sm font-semibold text-gray-600">%</span>
+        </div>
+        <button type="button" onclick="openPreview()" id="previewBtn"
+            class="bg-white hover:bg-gray-50 active:bg-gray-100 text-gray-800 font-semibold py-3 px-5 rounded-lg shadow border border-gray-300 flex items-center justify-center min-h-[48px] flex-1 sm:flex-none transition">
+            Vista previa
+        </button>
         <button type="button" onclick="downloadPdf()" id="pdfBtn"
             class="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 px-5 rounded-lg shadow flex items-center justify-center min-h-[48px] flex-1 sm:flex-none transition">
             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
             Descargar PDF
         </button>
-        <button type="button" onclick="window.print()"
+        <button type="button" onclick="printQuote()"
             class="bg-gray-700 hover:bg-gray-800 text-white font-semibold py-3 px-5 rounded-lg shadow flex items-center justify-center min-h-[48px] flex-1 sm:flex-none transition">
             Imprimir
         </button>
+    </div>
+
+    <div id="previewOverlay" class="no-print" aria-hidden="true">
+        <div id="previewToolbar">
+            <div style="font-weight:600">Vista previa · <span id="previewScaleLabel">95%</span> · A4</div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                <button type="button" style="background:#2563eb;color:#fff" onclick="downloadPdfFromPreview()">Descargar PDF</button>
+                <button type="button" style="background:#e5e7eb;color:#111827" onclick="closePreview()">Cerrar</button>
+            </div>
+        </div>
+        <div id="previewSheet"></div>
     </div>
 
     <div id="quote" class="page-container max-w-4xl mx-auto bg-white p-6 md:p-12 shadow-xl rounded-lg">
@@ -216,34 +266,152 @@
             document.getElementById('totalFinal').textContent = clpFormatter.format(totalNeto + iva);
         }
 
+        function getPrintScale() {
+            const el = document.getElementById('printScale');
+            let n = parseInt(el && el.value, 10);
+            if (!Number.isFinite(n)) n = 95;
+            n = Math.min(100, Math.max(50, n));
+            if (el) el.value = String(n);
+            return n;
+        }
+
+        function applyPrintScaleCss() {
+            const s = getPrintScale() / 100;
+            document.documentElement.style.setProperty('--print-scale', String(s));
+        }
+
+        function printQuote() {
+            applyPrintScaleCss();
+            window.print();
+        }
+
+        function openPreview() {
+            const scale = getPrintScale();
+            const overlay = document.getElementById('previewOverlay');
+            const sheet = document.getElementById('previewSheet');
+            const quote = document.getElementById('quote');
+            document.getElementById('previewScaleLabel').textContent = scale + '%';
+            sheet.innerHTML = '';
+            const clone = quote.cloneNode(true);
+            clone.id = 'quotePreview';
+            clone.querySelectorAll('.no-print').forEach(n => n.remove());
+            // freeze inputs as plain text look
+            clone.querySelectorAll('input, textarea').forEach(inp => {
+                inp.setAttribute('readonly', 'readonly');
+            });
+            sheet.appendChild(clone);
+            const factor = scale / 100;
+            sheet.style.transform = 'scale(' + factor + ')';
+            // Keep visual height roughly A4 after scale so overlay scroll feels right
+            sheet.style.marginBottom = (297 * (1 - factor) + 24) + 'mm';
+            overlay.classList.add('open');
+            overlay.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closePreview() {
+            const overlay = document.getElementById('previewOverlay');
+            overlay.classList.remove('open');
+            overlay.setAttribute('aria-hidden', 'true');
+            document.getElementById('previewSheet').innerHTML = '';
+            document.body.style.overflow = '';
+        }
+
+        function downloadPdfFromPreview() {
+            closePreview();
+            downloadPdf();
+        }
+
         async function downloadPdf() {
             const btn = document.getElementById('pdfBtn');
             const prev = btn.innerHTML;
             btn.disabled = true;
             btn.textContent = 'Generando PDF…';
-            document.querySelectorAll('.no-print').forEach(el => { el.style.visibility = 'hidden'; });
+            document.querySelectorAll('.action-bar, #previewOverlay').forEach(el => { el.style.visibility = 'hidden'; });
             try {
                 const num = (document.getElementById('quoteNumber').value || 'cotizacion').trim() || 'cotizacion';
-                const opt = {
-                    margin: [10, 10, 10, 10],
-                    filename: 'Cotizacion_Astralimit_' + num + '.pdf',
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-                };
-                await html2pdf().set(opt).from(document.getElementById('quote')).save();
+                const scalePct = getPrintScale();
+                const el = document.getElementById('quote');
+                // Capture at high res, then place on one A4 page using the chosen scale (fit if needed).
+                const canvas = await html2canvas(el, {
+                    scale: 2,
+                    useCORS: true,
+                    letterRendering: true,
+                    backgroundColor: '#ffffff',
+                    logging: false
+                });
+                const imgData = canvas.toDataURL('image/jpeg', 0.98);
+                const JsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+                if (!JsPDF || !window.html2canvas) throw new Error('PDF libs missing');
+                const pdf = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+                const pageW = 210, pageH = 297;
+                const margin = 8;
+                const usableW = pageW - margin * 2;
+                const usableH = pageH - margin * 2;
+                const imgRatio = canvas.height / canvas.width;
+                let drawW = usableW * (scalePct / 100);
+                let drawH = drawW * imgRatio;
+                // If still taller than the page at chosen %, shrink to fit one page.
+                if (drawH > usableH) {
+                    const fit = usableH / drawH;
+                    drawW *= fit;
+                    drawH *= fit;
+                }
+                const x = margin + (usableW - drawW) / 2;
+                const y = margin;
+                pdf.addImage(imgData, 'JPEG', x, y, drawW, drawH);
+                pdf.save('Cotizacion_Astralimit_' + num + '.pdf');
             } catch (e) {
-                alert('No se pudo generar el PDF. Probá con Imprimir → Guardar como PDF.');
                 console.error(e);
+                // Fallback to html2pdf with reduced margins + user scale via CSS zoom on clone
+                try {
+                    const num = (document.getElementById('quoteNumber').value || 'cotizacion').trim() || 'cotizacion';
+                    const scalePct = getPrintScale();
+                    const opt = {
+                        margin: [5, 5, 5, 5],
+                        filename: 'Cotizacion_Astralimit_' + num + '.pdf',
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                        pagebreak: { mode: ['avoid-all'] }
+                    };
+                    const quote = document.getElementById('quote');
+                    const old = quote.style.transform;
+                    const oldOrigin = quote.style.transformOrigin;
+                    quote.style.transformOrigin = 'top left';
+                    quote.style.transform = 'scale(' + (scalePct / 100) + ')';
+                    await html2pdf().set(opt).from(quote).save();
+                    quote.style.transform = old;
+                    quote.style.transformOrigin = oldOrigin;
+                } catch (e2) {
+                    alert('No se pudo generar el PDF. Probá con Imprimir → Guardar como PDF y usá la escala ' + getPrintScale() + '%.');
+                    console.error(e2);
+                }
             } finally {
-                document.querySelectorAll('.no-print').forEach(el => { el.style.visibility = ''; });
+                document.querySelectorAll('.action-bar, #previewOverlay').forEach(el => { el.style.visibility = ''; });
                 btn.disabled = false;
                 btn.innerHTML = prev;
             }
         }
 
-        window.onload = () => { addRow(); };
+        window.onload = () => {
+            addRow();
+            const scaleInput = document.getElementById('printScale');
+            if (scaleInput) {
+                scaleInput.addEventListener('change', () => {
+                    applyPrintScaleCss();
+                    if (document.getElementById('previewOverlay').classList.contains('open')) openPreview();
+                });
+                scaleInput.addEventListener('input', () => {
+                    const lab = document.getElementById('previewScaleLabel');
+                    if (lab) lab.textContent = getPrintScale() + '%';
+                });
+            }
+            applyPrintScaleCss();
+            document.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Escape') closePreview();
+            });
+        };
     </script>
 </body>
 </html>
